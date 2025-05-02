@@ -37,10 +37,11 @@ export class ExamStack extends cdk.Stack {
       memorySize: 128,
       environment: {
         TABLE_NAME: table.tableName,
-        REGION: "eu-west-1",
+        REGION: this.region,
       },
     });
 
+    // seed initial data into the table
     new custom.AwsCustomResource(this, "moviesddbInitData", {
       onCreate: {
         service: "DynamoDB",
@@ -50,7 +51,7 @@ export class ExamStack extends cdk.Stack {
             [table.tableName]: generateBatch(movieCrew),
           },
         },
-        physicalResourceId: custom.PhysicalResourceId.of("moviesddbInitData"), //.of(Date.now().toString()),
+        physicalResourceId: custom.PhysicalResourceId.of("moviesddbInitData"),
       },
       policy: custom.AwsCustomResourcePolicy.fromSdkCalls({
         resources: [table.tableArn],
@@ -75,7 +76,7 @@ export class ExamStack extends cdk.Stack {
     const movie = movies.addResource("{movieId}");
     movie.addMethod(
       "GET",
-      new apig.LambdaIntegration(question1Fn),
+      new apig.LambdaIntegration(question1Fn)
     );
 
     const anEndpoint = api.root.addResource("patha");
@@ -84,7 +85,7 @@ export class ExamStack extends cdk.Stack {
     // ==================================
     // Question 2 - Event-Driven architecture
 
-     const bucket = new s3.Bucket(this, "exam-bucket", {
+    const bucket = new s3.Bucket(this, "exam-bucket", {
       removalPolicy: cdk.RemovalPolicy.DESTROY,
       autoDeleteObjects: true,
       publicReadAccess: false,
@@ -109,7 +110,7 @@ export class ExamStack extends cdk.Stack {
       timeout: cdk.Duration.seconds(10),
       memorySize: 128,
       environment: {
-        REGION: "eu-west-1",
+        REGION: this.region,
       },
     });
 
@@ -120,12 +121,12 @@ export class ExamStack extends cdk.Stack {
       timeout: cdk.Duration.seconds(10),
       memorySize: 128,
       environment: {
-        REGION: "eu-west-1",
+        REGION: this.region,
+        QUEUE_B_URL: queueB.queueUrl,   // Part C: QueueB URL
       },
     });
 
     // Publish to SQS Queue A only messages from allowed countries
-    // Subscribe QueueA to Topic1
     topic1.addSubscription(new subs.SqsSubscription(queueA, {
       filterPolicyWithMessageBody: {
         address: sns.FilterOrPolicy.policy({
@@ -142,7 +143,6 @@ export class ExamStack extends cdk.Stack {
     lambdaXFn.addEventSource(new events.SqsEventSource(queueA));
 
     // Publish to Lambda Y messages from other countries
-    // Subscribe LambdaY to Topic1
     topic1.addSubscription(new subs.LambdaSubscription(lambdaYFn, {
       filterPolicyWithMessageBody: {
         address: sns.FilterOrPolicy.policy({
@@ -154,7 +154,9 @@ export class ExamStack extends cdk.Stack {
         }),
       },
     }));
-    
+
+    // Part C: Allow LambdaYFn send messages to queueB
+    queueB.grantSendMessages(lambdaYFn);
+
   }
 }
-  
