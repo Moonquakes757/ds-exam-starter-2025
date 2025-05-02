@@ -113,13 +113,6 @@ export class ExamStack extends cdk.Stack {
       },
     });
 
-    // Subscribe QueueA to Topic1
-    topic1.addSubscription(new subs.SqsSubscription(queueA));
-    // Subscribe LambdaY to Topic1
-    topic1.addSubscription(new subs.LambdaSubscription(lambdaYFn));
-    // Add SQS event source to LambdaX
-    lambdaXFn.addEventSource(new events.SqsEventSource(queueA));
-
     const lambdaYFn = new lambdanode.NodejsFunction(this, "LambdaYFn", {
       architecture: lambda.Architecture.ARM_64,
       runtime: lambda.Runtime.NODEJS_22_X,
@@ -130,6 +123,37 @@ export class ExamStack extends cdk.Stack {
         REGION: "eu-west-1",
       },
     });
+
+    // Publish to SQS Queue A only messages from allowed countries
+    // Subscribe QueueA to Topic1
+    topic1.addSubscription(new subs.SqsSubscription(queueA, {
+      filterPolicyWithMessageBody: {
+        address: sns.FilterOrPolicy.policy({
+          country: sns.FilterOrPolicy.filter(
+            sns.SubscriptionFilter.stringFilter({
+              allowlist: ["Ireland", "China"],
+            })
+          ),
+        }),
+      },
+    }));
+
+    // Lambda X reads off of QueueA
+    lambdaXFn.addEventSource(new events.SqsEventSource(queueA));
+
+    // Publish to Lambda Y messages from other countries
+    // Subscribe LambdaY to Topic1
+    topic1.addSubscription(new subs.LambdaSubscription(lambdaYFn, {
+      filterPolicyWithMessageBody: {
+        address: sns.FilterOrPolicy.policy({
+          country: sns.FilterOrPolicy.filter(
+            sns.SubscriptionFilter.stringFilter({
+              denylist: ["Ireland", "China"],
+            })
+          ),
+        }),
+      },
+    }));
     
   }
 }
