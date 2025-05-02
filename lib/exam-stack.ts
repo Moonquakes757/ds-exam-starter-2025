@@ -113,6 +113,13 @@ export class ExamStack extends cdk.Stack {
       },
     });
 
+    // Subscribe QueueA to Topic1
+    topic1.addSubscription(new subs.SqsSubscription(queueA));
+    // Subscribe LambdaY to Topic1
+    topic1.addSubscription(new subs.LambdaSubscription(lambdaYFn));
+    // Add SQS event source to LambdaX
+    lambdaXFn.addEventSource(new events.SqsEventSource(queueA));
+
     const lambdaYFn = new lambdanode.NodejsFunction(this, "LambdaYFn", {
       architecture: lambda.Architecture.ARM_64,
       runtime: lambda.Runtime.NODEJS_22_X,
