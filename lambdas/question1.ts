@@ -3,6 +3,7 @@ import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import {
   DynamoDBDocumentClient,
   GetCommand,
+  QueryCommand,
 } from "@aws-sdk/lib-dynamodb";
 
 const client = createDDbDocClient();
@@ -12,18 +13,22 @@ export const handler: APIGatewayProxyHandlerV2 = async (event, context) => {
   try {
     console.log("Event: ", JSON.stringify(event));
 
-    // 1. get movieId and role
+    // 1. get path parameter movieId and query parameter role
     const movieIdParam = event.pathParameters?.movieId;
     const role = event.queryStringParameters?.role;
-    if (!movieIdParam || !role) {
+
+    // 2. movieId
+    if (!movieIdParam) {
       return {
         statusCode: 400,
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ message: "movieId path parameter and role query parameter are required" }),
+        body: JSON.stringify({
+          message: "movieId path parameter is required",
+        }),
       };
     }
 
-    // 2. trans to number
+    // 3. trans to number
     const movieId = parseInt(movieIdParam, 10);
     if (isNaN(movieId)) {
       return {
@@ -33,28 +38,47 @@ export const handler: APIGatewayProxyHandlerV2 = async (event, context) => {
       };
     }
 
-    // 3. Get item using GetCommand from DynamoDB
-    const result = await client.send(
-      new GetCommand({
-        TableName: TABLE_NAME,
-        Key: { movieId, role },
-      })
-    );
+    // 4. use GetCommand / QueryCommand to search
+    if (role) {
+      const { Item } = await client.send(
+        new GetCommand({
+          TableName: TABLE_NAME,
+          Key: { movieId, role },
+        })
+      );
 
-    if (!result.Item) {
+      if (!Item) {
+        return {
+          statusCode: 404,
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            message: `No crew found for movieId=${movieId} with role=${role}`,
+          }),
+        };
+      }
+
       return {
-        statusCode: 404,
+        statusCode: 200,
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ message: `No crew found for movieId=${movieId} with role=${role}` }),
+        body: JSON.stringify(Item),
+      };
+    } else {
+      const { Items } = await client.send(
+        new QueryCommand({
+          TableName: TABLE_NAME,
+          KeyConditionExpression: "movieId = :m",
+          ExpressionAttributeValues: {
+            ":m": movieId,
+          },
+        })
+      );
+
+      return {
+        statusCode: 200,
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(Items ?? []),
       };
     }
-
-    // 4. return data
-    return {
-      statusCode: 200,
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(result.Item),
-    };
   } catch (error: any) {
     console.error(error);
     return {

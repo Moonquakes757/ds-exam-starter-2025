@@ -76,12 +76,6 @@ export class ExamStack extends cdk.Stack {
     movie.addMethod(
       "GET",
       new apig.LambdaIntegration(question1Fn),
-      {
-        // enter ?role=
-        requestParameters: {
-          "method.request.querystring.role": true,
-        },
-      }
     );
 
     const anEndpoint = api.root.addResource("patha");
